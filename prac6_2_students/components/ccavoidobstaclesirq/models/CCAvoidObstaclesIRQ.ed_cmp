@@ -1,0 +1,274 @@
+import "../../../dataclasses/TEDROOMByte/models/TEDROOMByte.ed_dclass";
+import "../../../protocols/CPAvoidObstaclesSysCtrl/models/CPAvoidObstaclesSysCtrl.ed_prot";
+import "../../../protocols/CPSensorIRQ/models/CPSensorIRQ.ed_prot";
+import "../../../protocols/EDROOMServiceLibrary/models/EDROOMServiceLibrary.ed_prot";
+import "../../../sais/sensors_iface_v1/models/sensors_iface_v1.ed_sai";
+import "../../../sais/io_ctrl_iface_v1/models/io_ctrl_iface_v1.ed_sai";
+import "../../../sais/actuators_iface_v1/models/actuators_iface_v1.ed_sai";
+
+
+
+/**
+ * \class   CCAvoidObstaclesIRQ
+ *
+ */
+
+
+reactive component CCAvoidObstaclesIRQ{
+
+	uri := es.uah.aut.srg.edroom.mclev.cmp.CCAvoidObstaclesIRQ;
+	version := v1;
+	stack_size := 1024;
+	def_max_nb_messages := 10;
+	requires := sensors_iface(v1),
+			io_ctrl_iface(v1),
+			actuators_iface(v1);
+
+
+
+
+	structure {
+
+		ports {
+
+
+			system port EDROOMsl
+			{
+				id:= 0;
+				protocol:= EDROOMServiceLibrary(v1);
+			};
+			external port AvoidObstaclesSysCtrl {
+				id := 1;
+				cardinality := 1;
+				protocol := CPAvoidObstaclesSysCtrl(v1);
+
+			};
+
+			interrupt port SensorIRQ {
+				id := 2;
+				irq vectors := 18;
+				data pool := TEDROOMByte(v1)CDEDROOMPoolTEDROOMByte[10];
+				protocol := CPSensorIRQ(v1);
+
+				non_maskable := false;
+				enable_msg_to_component := true;
+				priority := 1;
+				enable_bottom_half := true;
+				top half {
+					<code>
+
+						EDROOMVar IRQ18='X';
+
+					</code>
+				};
+				bottom half {
+					<code>
+
+						actuators_halt();
+
+					</code>
+				};
+			};
+
+
+
+		};
+
+
+	};
+
+
+	behaviour {
+
+		contexts {
+
+
+			context Top_0{
+
+
+				id := 0;
+
+
+				variables {
+					variable VObsDetected{
+					 class := TEDROOMByte(v1);
+
+					 constructor := "";
+					 dimension := 0;
+					};
+
+
+				};
+
+
+				states {
+					state I{
+						id := 0;
+					};
+					state Idle{
+						id := 1;
+					};
+					state Ready{
+						id := 2;
+					};
+				};
+
+
+				init state := I;
+
+
+				items{
+					/**
+					 * \brief  
+					 */
+
+					reply FConfigOK {
+						code {
+							<code>
+
+
+							</code>
+						};
+
+						message :=CPAvoidObstaclesSysCtrl(v1)::SConfigOK;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					msgdatahandler FHandleIRQ {
+						code {
+							<code>
+								
+									// Data access
+								
+								VObsDetected =varEDROOMIRQsignal;
+
+
+							</code>
+						};
+
+						port :=SensorIRQ;
+
+						message :=CPSensorIRQ(v1)::EDROOMIRQsignal;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					send FHandleObstacle {
+						code {
+							<code>
+							io_ctrl_detect_obstacle(VObsDetected);
+
+
+							</code>
+						};
+
+						port :=AvoidObstaclesSysCtrl;
+
+						message :=CPAvoidObstaclesSysCtrl(v1)::SObstacleDetected;
+
+						priority :=3;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					action Finit {
+						<code>
+						SensorIRQ.InstallHandler();
+
+
+						</code>
+
+					};
+
+
+				};
+
+
+				transitions{
+
+					transition Config{
+						id := 0;
+						source := Idle;
+						sink := Idle;
+
+
+						reply := FConfigOK;
+
+
+						synchronous trigger {
+							port := AvoidObstaclesSysCtrl;
+							message := CPAvoidObstaclesSysCtrl(v1)::SConfigAO;
+						};
+					};
+
+					transition Start{
+						id := 1;
+						source := Idle;
+						sink := Ready;
+
+
+
+						asynchronous trigger {
+							port := AvoidObstaclesSysCtrl;
+							message := CPAvoidObstaclesSysCtrl(v1)::SStart;
+						};
+					};
+
+					transition HandleObstacle{
+						id := 2;
+						source := Ready;
+						sink := Ready;
+
+
+						msgdatahandler := FHandleIRQ;
+
+						sends := FHandleObstacle;
+
+
+						asynchronous trigger {
+							port := SensorIRQ;
+							message := CPSensorIRQ(v1)::EDROOMIRQsignal;
+						};
+					};
+
+					transition Init{
+						id := 3;
+						source := I;
+						sink := Idle;
+
+
+						actions := Finit;
+
+
+						asynchronous trigger {
+							port := EDROOMsl;
+							message := EDROOMServiceLibrary(v1)::EDROOMStart;
+						};
+					};
+
+
+				};
+
+
+			};
+
+
+		};
+
+		top context := Top_0;
+
+
+	};
+
+
+};

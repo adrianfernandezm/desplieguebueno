@@ -1,0 +1,51 @@
+import "../../../dataclasses/CDPath/models/CDPath.ed_dclass";
+
+
+/*
+ * EDROOM Protocol Model.
+*/ 
+
+
+protocol CPTrackPath{
+
+	uri :=es.uah.aut.srg.edroom.mclev.cmp_iface.CPTrackPath;
+	version :=v1;
+
+
+	/*
+	 * Input messages.
+	*/ 
+
+	input messages
+
+	{
+
+
+		/*
+		 * Asynchronous messages.
+		*/ 
+
+		send STrackPath(CDPath(v1));
+
+	};
+
+
+
+	/*
+	 * Output messages.
+	*/ 
+
+	output messages
+
+	{
+
+
+		/*
+		 * Asynchronous messages.
+		*/ 
+
+		send SPathRequest();
+
+	};
+
+};

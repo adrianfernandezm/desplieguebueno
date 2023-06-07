@@ -1,0 +1,58 @@
+
+
+/*
+ * EDROOM Protocol Model.
+*/ 
+
+
+protocol CPPathTrackerCtrl{
+
+	uri :=es.uah.aut.srg.edroom.mclev.cmp_iface.CPPathTrackerCtrl;
+	version :=v1;
+
+
+	/*
+	 * Input messages.
+	*/ 
+
+	input messages
+
+	{
+
+
+		/*
+		 * Asynchronous messages.
+		*/ 
+
+		send SStopTracking();
+		send SStartTracking();
+
+		/*
+		 * Synchronous Invoke messages.
+		*/ 
+
+		invoke SConfigPathTracker() replies SConfigErrorSConfigOK;
+
+	};
+
+
+
+	/*
+	 * Output messages.
+	*/ 
+
+	output messages
+
+	{
+
+
+		/*
+		 * Synchronous reply messages.
+		*/ 
+
+		reply SConfigError();
+		reply SConfigOK();
+
+	};
+
+};

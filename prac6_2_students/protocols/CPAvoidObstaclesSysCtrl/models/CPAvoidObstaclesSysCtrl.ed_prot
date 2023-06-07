@@ -1,0 +1,63 @@
+
+
+/*
+ * EDROOM Protocol Model.
+*/ 
+
+
+protocol CPAvoidObstaclesSysCtrl{
+
+	uri :=es.uah.aut.srg.edroom.mclev.cmp_iface.CPAvoidObstaclesSysCtrl;
+	version :=v1;
+
+
+	/*
+	 * Input messages.
+	*/ 
+
+	input messages
+
+	{
+
+
+		/*
+		 * Asynchronous messages.
+		*/ 
+
+		send SStart();
+
+		/*
+		 * Synchronous Invoke messages.
+		*/ 
+
+		invoke SConfigAO() replies SConfigErrorSConfigOK;
+
+	};
+
+
+
+	/*
+	 * Output messages.
+	*/ 
+
+	output messages
+
+	{
+
+
+		/*
+		 * Asynchronous messages.
+		*/ 
+
+		send SObstacleDetected();
+
+		/*
+		 * Synchronous reply messages.
+		*/ 
+
+		reply SConfigError();
+		reply SConfigOK();
+
+	};
+
+};

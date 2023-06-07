@@ -1,0 +1,32 @@
+import "../../../dataclasses/TEDROOMByte/models/TEDROOMByte.ed_dclass";
+
+
+/*
+ * EDROOM Protocol Model.
+*/ 
+
+
+protocol CPSensorIRQ{
+
+	uri :=es.uah.aut.srg.edroom.mclev.cmp_iface.CPSensorIRQ;
+	version :=v1;
+
+
+	/*
+	 * Input messages.
+	*/ 
+
+	input messages
+
+	{
+
+
+		/*
+		 * Asynchronous messages.
+		*/ 
+
+		send EDROOMIRQsignal(TEDROOMByte(v1));
+
+	};
+
+};

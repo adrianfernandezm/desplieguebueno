@@ -1,0 +1,493 @@
+import "../../../dataclasses/CDPath/models/CDPath.ed_dclass";
+import "../../../dataclasses/TEDROOMUInt8/models/TEDROOMUInt8.ed_dclass";
+import "../../../protocols/CPPathTrackerCtrl/models/CPPathTrackerCtrl.ed_prot";
+import "../../../protocols/CPTrackPath/models/CPTrackPath.ed_prot";
+import "../../../protocols/EDROOMTimingSAP/models/EDROOMTimingSAP.ed_prot";
+import "../../../protocols/EDROOMServiceLibrary/models/EDROOMServiceLibrary.ed_prot";
+import "../../../sais/actuators_iface_v1/models/actuators_iface_v1.ed_sai";
+import "../../../sais/io_ctrl_iface_v1/models/io_ctrl_iface_v1.ed_sai";
+
+
+
+/**
+ * \class   CAPathTracker
+ *
+ */
+
+
+reactive component CAPathTracker{
+
+	uri := es.uah.aut.srg.edroom.mclev.cmp.CAPathTracker;
+	version := v1;
+	stack_size := 2048;
+	def_max_nb_messages := 10;
+	requires := actuators_iface(v1),
+			io_ctrl_iface(v1);
+
+
+
+
+	structure {
+
+		ports {
+
+
+			system port EDROOMsl
+			{
+				id:= 0;
+				protocol:= EDROOMServiceLibrary(v1);
+			};
+			timing port Timer {
+				id := 1;
+				protocol := EDROOMTimingSAP(v1);
+
+			};
+
+			external port TrackPath {
+				id := 2;
+				cardinality := 1;
+				protocol := CPTrackPath(v1);
+
+			};
+
+			external port PathTrackerCtrl {
+				id := 3;
+				cardinality := 1;
+				protocol := CPPathTrackerCtrl(v1);
+
+			};
+
+
+
+		};
+
+
+	};
+
+
+	behaviour {
+
+		contexts {
+
+
+			context Top_0{
+
+
+				id := 0;
+
+
+				variables {
+					variable VCurrentPath{
+					 class := CDPath(v1);
+
+					 constructor := "";
+					 dimension := 0;
+					};
+					variable VCurrentPathStep{
+					 class := TEDROOMUInt8(v1);
+
+					 constructor := "0";
+					 dimension := 0;
+					};
+					variable VSimError{
+					 class := TEDROOMUInt8(v1);
+
+					 constructor := "2";
+					 dimension := 0;
+					};
+
+
+				};
+
+
+				states {
+					state I{
+						id := 0;
+					};
+					state Idle{
+						id := 1;
+					};
+					state StandBy{
+						id := 2;
+					};
+					state TrackingPath{
+						id := 3;
+					};
+					state Pause{
+						id := 4;
+					};
+				};
+
+
+				init state := I;
+
+
+				guards{
+
+					guard GLastStep {
+						<code>
+						{
+						 
+							return (VCurrentPathStep&gt;=VCurrentPath.pathSteps);
+						 
+						 
+						 
+						 
+						}
+
+
+						</code>
+
+					};
+
+
+				};
+
+
+				items{
+					/**
+					 * \brief  
+					 */
+
+					msgdatahandler FGetNewPatch {
+						code {
+							<code>
+								
+									// Data access
+							 
+								VCurrentPath = varSTrackPath;
+							 
+							 	VCurrentPathStep=0;
+
+
+							</code>
+						};
+
+						port :=TrackPath;
+
+						message :=CPTrackPath(v1)::STrackPath;
+
+					};
+
+					action FGoToPathStep {
+						<code>
+						{
+						 io_ctrl_go_to_path_step(VCurrentPathStep);
+						 
+						 actuators_go_to_location(VCurrentPath.pathLocations[VCurrentPathStep]);
+						 
+						 VCurrentPathStep++;
+						 
+						}
+
+
+						</code>
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					inform in FProgFirstTrackStep {
+						code {
+							<code>
+								 
+								//Timing Service useful methods
+								 
+							 interval = Pr_Time(0,10000); // interval of X sec + Y microsec
+
+
+							</code>
+						};
+
+						port :=Timer;
+
+						priority :=3;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					inform in FProgNextTrackStep {
+						code {
+							<code>
+								 
+								//Timing Service useful methods
+								 
+							  interval = Pr_Time(0,400000); // interval of X sec + Y microsec
+
+
+							</code>
+						};
+
+						port :=Timer;
+
+						priority :=1;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					reply FReplyOK {
+						code {
+							<code>
+							actuators_start();
+
+
+							</code>
+						};
+
+						message :=CPPathTrackerCtrl(v1)::SConfigOK;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					reply FReplySimError {
+						code {
+							<code>
+							 
+							 
+							  VSimError--;
+
+
+							</code>
+						};
+
+						message :=CPPathTrackerCtrl(v1)::SConfigError;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					send FSendPathRequest {
+						code {
+							<code>
+
+
+							</code>
+						};
+
+						port :=TrackPath;
+
+						message :=CPTrackPath(v1)::SPathRequest;
+
+						priority :=3;
+
+					};
+
+
+				};
+
+
+				choice points{
+					choice point PathStep{
+
+
+						id := 0;
+
+
+						branches{
+
+							branch PathStep_LastStep{
+								id := 0;
+								sink := StandBy;
+
+
+								sends := FSendPathRequest;
+
+								guard := GLastStep;
+
+							};
+
+
+						};
+
+						default branch PathStep_toNextStep{
+							id := 1;
+							sink := TrackingPath;
+
+
+							actions := FProgNextTrackStep;
+						};
+					};
+					choice point Config{
+
+
+						id := 1;
+
+
+						branches{
+
+							branch Config_Error{
+								id := 0;
+								sink := Idle;
+
+
+								handshakes{
+									handshake{
+										invoke := FReplySimError;
+									};
+								};
+
+								guard := ;
+
+							};
+
+
+						};
+
+						default branch Config_OK{
+							id := 1;
+							sink := Idle;
+
+
+							handshakes{
+								handshake{
+									invoke := FReplyOK;
+								};
+							};
+						};
+					};
+				};
+
+
+				transitions{
+
+					transition Init{
+						id := 0;
+						source := I;
+						sink := Idle;
+
+
+
+						asynchronous trigger {
+							port := EDROOMsl;
+							message := EDROOMServiceLibrary(v1)::EDROOMStart;
+						};
+					};
+
+					transition NewPath{
+						id := 1;
+						source := StandBy;
+						sink := TrackingPath;
+
+
+						msgdatahandler := FGetNewPatch;
+
+						actions := FProgFirstTrackStep;
+
+
+						asynchronous trigger {
+							port := TrackPath;
+							message := CPTrackPath(v1)::STrackPath;
+						};
+					};
+
+					transition PathStep{
+						id := 2;
+						source := TrackingPath;
+						sink := PathStep;
+
+
+						actions := FGoToPathStep;
+
+
+						asynchronous trigger {
+							port := Timer;
+							message := EDROOMTimingSAP(v1)::EDROOMSignalTimeout;
+						};
+					};
+
+					transition Config{
+						id := 3;
+						source := Idle;
+						sink := Config;
+
+
+
+						synchronous trigger {
+							port := PathTrackerCtrl;
+							message := CPPathTrackerCtrl(v1)::SConfigPathTracker;
+						};
+					};
+
+					transition Start{
+						id := 4;
+						source := Idle;
+						sink := StandBy;
+
+
+
+						asynchronous trigger {
+							port := PathTrackerCtrl;
+							message := CPPathTrackerCtrl(v1)::SStartTracking;
+						};
+					};
+
+					transition StopTrack{
+						id := 5;
+						source := TrackingPath;
+						sink := Pause;
+
+
+
+						asynchronous trigger {
+							port := PathTrackerCtrl;
+							message := CPPathTrackerCtrl(v1)::SStopTracking;
+						};
+					};
+
+					transition ResumePath{
+						id := 6;
+						source := Pause;
+						sink := TrackingPath;
+
+
+						msgdatahandler := FGetNewPatch;
+
+
+						asynchronous trigger {
+							port := TrackPath;
+							message := CPTrackPath(v1)::STrackPath;
+						};
+					};
+
+					transition ToStandBy{
+						id := 7;
+						source := Pause;
+						sink := StandBy;
+
+
+
+						asynchronous trigger {
+							port := Timer;
+							message := EDROOMTimingSAP(v1)::EDROOMSignalTimeout;
+						};
+					};
+
+
+				};
+
+
+			};
+
+
+		};
+
+		top context := Top_0;
+
+
+	};
+
+
+};

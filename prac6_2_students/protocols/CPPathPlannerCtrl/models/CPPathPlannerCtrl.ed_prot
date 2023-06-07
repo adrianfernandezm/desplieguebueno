@@ -1,0 +1,60 @@
+import "../../../dataclasses/CDLocation/models/CDLocation.ed_dclass";
+
+
+/*
+ * EDROOM Protocol Model.
+*/ 
+
+
+protocol CPPathPlannerCtrl{
+
+	uri :=es.uah.aut.srg.edroom.mclev.cmp_iface.CPPathPlannerCtrl;
+	version :=v1;
+
+
+	/*
+	 * Input messages.
+	*/ 
+
+	input messages
+
+	{
+
+
+		/*
+		 * Asynchronous messages.
+		*/ 
+
+		send SMarkObstacle(CDLocation(v1));
+		send SNewTargetLocation(CDLocation(v1));
+		send SStartPlanning();
+
+		/*
+		 * Synchronous Invoke messages.
+		*/ 
+
+		invoke SConfigPathPlanner(CDLocation(v1)) replies SConfigErrorSConfigOK;
+
+	};
+
+
+
+	/*
+	 * Output messages.
+	*/ 
+
+	output messages
+
+	{
+
+
+		/*
+		 * Synchronous reply messages.
+		*/ 
+
+		reply SConfigError();
+		reply SConfigOK();
+
+	};
+
+};

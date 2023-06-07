@@ -1,0 +1,698 @@
+import "../../../dataclasses/CDLocation/models/CDLocation.ed_dclass";
+import "../../../protocols/CPAvoidObstaclesSysCtrl/models/CPAvoidObstaclesSysCtrl.ed_prot";
+import "../../../protocols/CPPathTrackerCtrl/models/CPPathTrackerCtrl.ed_prot";
+import "../../../protocols/CPPathPlannerCtrl/models/CPPathPlannerCtrl.ed_prot";
+import "../../../protocols/EDROOMTimingSAP/models/EDROOMTimingSAP.ed_prot";
+import "../../../protocols/EDROOMServiceLibrary/models/EDROOMServiceLibrary.ed_prot";
+import "../../../components/capathplanner/models/CAPathPlanner.ed_cmp";
+import "../../../components/capathtracker/models/CAPathTracker.ed_cmp";
+import "../../../components/ccavoidobstaclesirq/models/CCAvoidObstaclesIRQ.ed_cmp";
+import "../../../sais/sensors_iface_v1/models/sensors_iface_v1.ed_sai";
+import "../../../sais/io_ctrl_iface_v1/models/io_ctrl_iface_v1.ed_sai";
+
+
+
+/**
+ * \class   Vehicle
+ *
+ */
+
+
+proactive component Vehicle{
+
+	uri := es.uah.aut.srg.edroom.mclev.cmp.Vehicle;
+	version := v1;
+	stack_size := 1024;
+	def_max_nb_messages := 10;
+	requires := sensors_iface(v1),
+			io_ctrl_iface(v1);
+
+
+
+
+	structure {
+
+		ports {
+
+
+			system port EDROOMsl
+			{
+				id:= 0;
+				protocol:= EDROOMServiceLibrary(v1);
+			};
+			conjugated  internal port AvoidObstaclesSysCtrl {
+				id := 1;
+				cardinality := 1;
+				protocol := CPAvoidObstaclesSysCtrl(v1);
+
+			};
+
+			timing port Timer {
+				id := 2;
+				protocol := EDROOMTimingSAP(v1);
+
+			};
+
+			conjugated  internal port PathPlannerCtrl {
+				id := 3;
+				cardinality := 1;
+				protocol := CPPathPlannerCtrl(v1);
+
+			};
+
+			conjugated  internal port PathTrackerCtrl {
+				id := 4;
+				cardinality := 1;
+				protocol := CPPathTrackerCtrl(v1);
+
+			};
+
+
+
+		};
+
+
+		instances {
+
+
+			instance PathPlanner
+			{
+				class := CAPathPlanner(v1);
+				max_nb_messages := 13;
+				priority :=5;
+			};
+			instance PathTracker
+			{
+				class := CAPathTracker(v1);
+				max_nb_messages := 13;
+				priority :=3;
+			};
+			instance AvoidObstaclesIRQ
+			{
+				class := CCAvoidObstaclesIRQ(v1);
+				max_nb_messages := 10;
+				priority :=3;
+			};
+		};
+
+
+		connections {
+			connection AvoidObstaclesIRQ.AvoidObstaclesSysCtrl<->this.AvoidObstaclesSysCtrl;
+			connection PathPlanner.TrackPath<->PathTracker.TrackPath;
+			connection this.PathTrackerCtrl<->PathTracker.PathTrackerCtrl;
+			connection this.PathPlannerCtrl<->PathPlanner.PathPlannerCtrl;
+		};
+
+
+		data pools {
+			CDLocation(v1) CEDROOMPoolCDLocation[10];
+
+		};
+
+
+	};
+
+
+	behaviour {
+
+		contexts {
+
+
+			context Top_0{
+
+
+				id := 0;
+
+
+				variables {
+					variable VTargetLocation{
+					 class := CDLocation(v1);
+
+					 constructor := "";
+					 dimension := 0;
+					};
+
+
+				};
+
+
+				states {
+					state I{
+						id := 0;
+					};
+					state StartUp{
+						id := 1;
+
+						entry actions := FStartUp, FProgTimerConfig;
+					};
+					state VehicleReady{
+						id := 2;
+					};
+					state SysRecovery{
+						id := 3;
+
+						entry actions := FProgRecovery;
+					};
+					state AvObstaclesConfigured{
+						id := 4;
+
+						entry actions := FProgTimerConfig;
+					};
+					state PathTrackerConfigured{
+						id := 5;
+
+						entry actions := FProgTimerConfig;
+					};
+				};
+
+
+				init state := I;
+
+
+				guards{
+
+					/**
+					 * \brief  
+					 */
+
+					guard GConfigError {
+						<code>
+						return(MsgBack-&gt;signal==SConfigError);
+
+
+						</code>
+
+					};
+
+
+				};
+
+
+				items{
+					action FAvObstaclesError {
+						<code>
+						{
+						 
+							io_ctrl_config_avoid_obstacles_error();
+						 
+						}
+
+
+						</code>
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					action FInit {
+						<code>
+						io_ctrl_init();
+
+
+						</code>
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					invoke FInvokeConfigAvObstacles {
+						code {
+							<code>
+
+
+							</code>
+						};
+
+						port :=AvoidObstaclesSysCtrl;
+
+						message :=CPAvoidObstaclesSysCtrl(v1)::SConfigAO;
+
+						priority :=1;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					invoke FInvokeConfigPathPlanner {
+						code {
+							<code>
+								
+									// Complete Data 
+								
+								*pSConfigPathPlanner_Data=VTargetLocation;
+
+
+							</code>
+						};
+
+						port :=PathPlannerCtrl;
+
+						message :=CPPathPlannerCtrl(v1)::SConfigPathPlanner;
+
+						priority :=1;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					invoke FInvokeConfigPathTracker {
+						code {
+							<code>
+
+
+							</code>
+						};
+
+						port :=PathTrackerCtrl;
+
+						message :=CPPathTrackerCtrl(v1)::SConfigPathTracker;
+
+						priority :=1;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					send FMarkObstacle {
+						code {
+							<code>
+								
+									// Complete Data 
+								
+								*pSMarkObstacle_Data=sensors_get_current_location();
+
+
+							</code>
+						};
+
+						port :=PathPlannerCtrl;
+
+						message :=CPPathPlannerCtrl(v1)::SMarkObstacle;
+
+						priority :=3;
+
+					};
+
+					action FPathPlannerError {
+						<code>
+						{
+						 
+							io_ctrl_config_path_planner_error();
+						 
+						 
+						}
+
+
+						</code>
+
+					};
+
+					action FPathTrackerError {
+						<code>
+						{
+						 
+							io_ctrl_path_tracker_error();
+						 
+						}
+
+
+						</code>
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					inform at FProgRecovery {
+						code {
+							<code>
+								
+								time.GetTime();
+							 
+								// Timing Service 
+								 
+								time+=Pr_Time(10,0);  // seconds
+								 
+								
+								io_ctrl_recovery();
+
+
+							</code>
+						};
+
+						port :=Timer;
+
+						priority :=1;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					inform in FProgTimerConfig {
+						code {
+							<code>
+								 
+								//Timing Service useful methods
+								 
+							   interval = Pr_Time(1,0); // interval of X sec + Y microsec
+
+
+							</code>
+						};
+
+						port :=Timer;
+
+						priority :=1;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					send FStartAvoidObs {
+						code {
+							<code>
+
+
+							</code>
+						};
+
+						port :=AvoidObstaclesSysCtrl;
+
+						message :=CPAvoidObstaclesSysCtrl(v1)::SStart;
+
+						priority :=3;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					send FStartPlanning {
+						code {
+							<code>
+
+
+							</code>
+						};
+
+						port :=PathPlannerCtrl;
+
+						message :=CPPathPlannerCtrl(v1)::SStartPlanning;
+
+						priority :=3;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					send FStartTracking {
+						code {
+							<code>
+
+
+							</code>
+						};
+
+						port :=PathTrackerCtrl;
+
+						message :=CPPathTrackerCtrl(v1)::SStartTracking;
+
+						priority :=3;
+
+					};
+
+					action FStartUp {
+						<code>
+						{
+						 
+							VTargetLocation=sensors_get_current_location();
+						 
+							if(VTargetLocation.latitude&gt;0) 
+								VTargetLocation.latitude-=0.1;
+							else
+								VTargetLocation.latitude+=0.1;
+						 
+							if(VTargetLocation.longitude&gt;0) 
+								VTargetLocation.longitude-=0.1;
+							else
+								VTargetLocation.longitude+=0.1;	
+						 
+							io_ctrl_startup();
+						 	  
+						}
+
+
+						</code>
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					send FStopTracking {
+						code {
+							<code>
+
+
+							</code>
+						};
+
+						port :=PathTrackerCtrl;
+
+						message :=CPPathTrackerCtrl(v1)::SStopTracking;
+
+						priority :=3;
+
+					};
+
+
+				};
+
+
+				choice points{
+					choice point ConfigAvObstacles{
+
+
+						id := 0;
+
+
+						branches{
+
+							branch ConfigAvObstacles_Error{
+								id := 0;
+								sink := SysRecovery;
+
+
+								actions := FAvObstaclesError;
+
+								guard := GConfigError;
+
+							};
+
+
+						};
+
+						default branch ConfigAvObstacles_OK{
+							id := 1;
+							sink := AvObstaclesConfigured;
+
+						};
+					};
+					choice point ConfigPathTracker{
+
+
+						id := 1;
+
+
+						branches{
+
+							branch ConfigPathTracker_Error{
+								id := 0;
+								sink := SysRecovery;
+
+
+								actions := FPathTrackerError;
+
+								guard := GConfigError;
+
+							};
+
+
+						};
+
+						default branch ConfigPathTracker_OK{
+							id := 1;
+							sink := PathTrackerConfigured;
+
+						};
+					};
+					choice point ConfigPathPlanner{
+
+
+						id := 2;
+
+
+						branches{
+
+							branch ConfigPathPlanner_Error{
+								id := 0;
+								sink := SysRecovery;
+
+
+								actions := FPathPlannerError;
+
+								guard := GConfigError;
+
+							};
+
+
+						};
+
+						default branch ConfigPathPlanner_OK{
+							id := 1;
+							sink := VehicleReady;
+
+
+							sends := FStartPlanning, FStartTracking, FStartAvoidObs;
+						};
+					};
+				};
+
+
+				transitions{
+
+					transition Init{
+						id := 0;
+						source := I;
+						sink := StartUp;
+
+
+						actions := FInit;
+
+
+						asynchronous trigger {
+							port := EDROOMsl;
+							message := EDROOMServiceLibrary(v1)::EDROOMStart;
+						};
+					};
+
+					transition ConfigAvObstacles{
+						id := 1;
+						source := StartUp;
+						sink := ConfigAvObstacles;
+
+
+						handshakes{
+							handshake{
+								invoke := FInvokeConfigAvObstacles;
+							};
+						};
+
+
+						asynchronous trigger {
+							port := Timer;
+							message := EDROOMTimingSAP(v1)::EDROOMSignalTimeout;
+						};
+					};
+
+					transition ReStart{
+						id := 2;
+						source := Top_0;
+						sink := StartUp;
+
+
+
+						asynchronous trigger {
+							port := Timer;
+							message := EDROOMTimingSAP(v1)::EDROOMSignalTimeout;
+						};
+					};
+
+					transition ConfigPathTracker{
+						id := 3;
+						source := AvObstaclesConfigured;
+						sink := ConfigPathTracker;
+
+
+						handshakes{
+							handshake{
+								invoke := FInvokeConfigPathTracker;
+							};
+						};
+
+
+						asynchronous trigger {
+							port := Timer;
+							message := EDROOMTimingSAP(v1)::EDROOMSignalTimeout;
+						};
+					};
+
+					transition ConfigPathPlanner{
+						id := 4;
+						source := PathTrackerConfigured;
+						sink := ConfigPathPlanner;
+
+
+						handshakes{
+							handshake{
+								invoke := FInvokeConfigPathPlanner;
+							};
+						};
+
+
+						asynchronous trigger {
+							port := Timer;
+							message := EDROOMTimingSAP(v1)::EDROOMSignalTimeout;
+						};
+					};
+
+					transition ObstacleDetected{
+						id := 5;
+						source := VehicleReady;
+						sink := VehicleReady;
+
+
+						sends := FStopTracking, FMarkObstacle;
+
+
+						asynchronous trigger {
+							port := AvoidObstaclesSysCtrl;
+							message := CPAvoidObstaclesSysCtrl(v1)::SObstacleDetected;
+						};
+					};
+
+
+				};
+
+
+			};
+
+
+		};
+
+		top context := Top_0;
+
+
+	};
+
+
+};

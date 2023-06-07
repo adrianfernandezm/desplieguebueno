@@ -1,0 +1,620 @@
+import "../../../dataclasses/CDLocation/models/CDLocation.ed_dclass";
+import "../../../dataclasses/CDPath/models/CDPath.ed_dclass";
+import "../../../dataclasses/TEDROOMUInt8/models/TEDROOMUInt8.ed_dclass";
+import "../../../dataclasses/TEDROOMBool/models/TEDROOMBool.ed_dclass";
+import "../../../protocols/CPPathPlannerCtrl/models/CPPathPlannerCtrl.ed_prot";
+import "../../../protocols/CPTrackPath/models/CPTrackPath.ed_prot";
+import "../../../protocols/EDROOMTimingSAP/models/EDROOMTimingSAP.ed_prot";
+import "../../../protocols/EDROOMServiceLibrary/models/EDROOMServiceLibrary.ed_prot";
+import "../../../sais/sensors_iface_v1/models/sensors_iface_v1.ed_sai";
+import "../../../sais/actuators_iface_v1/models/actuators_iface_v1.ed_sai";
+import "../../../sais/planner_iface_v1/models/planner_iface_v1.ed_sai";
+import "../../../sais/io_ctrl_iface_v1/models/io_ctrl_iface_v1.ed_sai";
+
+
+
+/**
+ * \class   CAPathPlanner
+ *
+ */
+
+
+reactive component CAPathPlanner{
+
+	uri := es.uah.aut.srg.edroom.mclev.cmp.CAPathPlanner;
+	version := v1;
+	stack_size := 2048;
+	def_max_nb_messages := 10;
+	requires := sensors_iface(v1),
+			actuators_iface(v1),
+			planner_iface(v1),
+			io_ctrl_iface(v1);
+
+
+
+
+	structure {
+
+		ports {
+
+
+			system port EDROOMsl
+			{
+				id:= 0;
+				protocol:= EDROOMServiceLibrary(v1);
+			};
+			timing port Timer {
+				id := 1;
+				protocol := EDROOMTimingSAP(v1);
+
+			};
+
+			conjugated  external port TrackPath {
+				id := 2;
+				cardinality := 1;
+				protocol := CPTrackPath(v1);
+
+			};
+
+			external port PathPlannerCtrl {
+				id := 3;
+				cardinality := 1;
+				protocol := CPPathPlannerCtrl(v1);
+
+			};
+
+
+
+		};
+
+
+		data pools {
+			CDPath(v1) CEDROOMPoolCDPath[3];
+
+		};
+
+
+	};
+
+
+	behaviour {
+
+		contexts {
+
+
+			context Top_0{
+
+
+				id := 0;
+
+
+				variables {
+					variable VNextPath{
+					 class := CDPath(v1);
+
+					 constructor := "";
+					 dimension := 0;
+					};
+					variable VNextStepStartPoing{
+					 class := CDLocation(v1);
+
+					 constructor := "";
+					 dimension := 0;
+					};
+					variable VSimError{
+					 class := TEDROOMUInt8(v1);
+
+					 constructor := "1";
+					 dimension := 0;
+					};
+					variable VTargetLocation{
+					 class := CDLocation(v1);
+
+					 constructor := "";
+					 dimension := 0;
+					};
+					variable VVehicleHalted{
+					 class := TEDROOMBool(v1);
+
+					 constructor := "true";
+					 dimension := 0;
+					};
+
+
+				};
+
+
+				constants {
+					constant VMaxPathSteps{
+					 class := TEDROOMUInt8(v1);
+
+					 constructor := "8";
+					 dimension := 0;
+					};
+					constant VMinPathSteps{
+					 class := TEDROOMUInt8(v1);
+
+					 constructor := "3";
+					 dimension := 0;
+					};
+
+
+				};
+
+
+				states {
+					state I{
+						id := 0;
+					};
+					state Idle{
+						id := 1;
+					};
+					state CalculatePath{
+						id := 2;
+					};
+					state CalNextPath{
+						id := 3;
+
+						exit actions := FProgNextStep;
+					};
+				};
+
+
+				init state := I;
+
+
+				guards{
+
+					guard GMaxSteps {
+						<code>
+						{
+						 
+						 
+						 return (VNextPath.pathSteps==VMaxPathSteps);
+						 
+						 
+						}
+
+
+						</code>
+
+					};
+
+					guard GSendMinPath {
+						<code>
+						{
+						 
+						 
+						 	return ((VVehicleHalted)&amp;&amp;(VNextPath.pathSteps&gt;=VMinPathSteps));
+						 
+						 
+						}
+
+
+						</code>
+
+					};
+
+
+				};
+
+
+				items{
+					action FCalPathStep {
+						<code>
+						{
+								io_ctrl_cal_step();
+						 
+						 		VNextPath.pathLocations[VNextPath.pathSteps]
+											=calNextPathStep(VNextStepStartPoing, VTargetLocation);
+						 
+								VNextPath.pathSteps++;
+						 
+						}
+
+
+						</code>
+
+					};
+
+					action FConfigPlanner {
+						<code>
+						{
+						 
+							VTargetLocation = *(CDLocation *)Msg-&gt;data;
+						 
+							
+						 
+						}
+
+
+						</code>
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					msgdatahandler FMarkObstacle {
+						code {
+							<code>
+								
+									// Data access
+							 
+							  markObstacle(varSMarkObstacle);
+
+
+							</code>
+						};
+
+						port :=PathPlannerCtrl;
+
+						message :=CPPathPlannerCtrl(v1)::SMarkObstacle;
+
+					};
+
+					action FMaxSteps {
+						<code>
+						{
+						 
+						 io_ctrl_max_num_of_step();
+						 
+						 
+						 
+						}
+
+
+						</code>
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					msgdatahandler FNewTarget {
+						code {
+							<code>
+								
+									// Data acces
+							 
+								VTargetLocation = varSNewTargetLocation;
+							 
+								VVehicleHalted=true;	
+								actuators_halt();
+							 
+								VNextStepStartPoing=sensors_get_current_location();
+							 
+								VNextPath.pathSteps=0;
+
+
+							</code>
+						};
+
+						port :=PathPlannerCtrl;
+
+						message :=CPPathPlannerCtrl(v1)::SNewTargetLocation;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					inform in FProgNextStep {
+						code {
+							<code>
+								 
+								//Timing Service useful methods
+								 
+							   interval = Pr_Time(0,100000); // interval of X sec + Y microsec
+
+
+							</code>
+						};
+
+						port :=Timer;
+
+						priority :=1;
+
+					};
+
+					action FReplanning {
+						<code>
+						{
+						 
+						   VVehicleHalted=true;
+						 
+						   VNextStepStartPoing=sensors_get_current_location();
+						   VNextPath.pathSteps=0;
+						 
+						}
+
+
+						</code>
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					reply FReplyConfigOK {
+						code {
+							<code>
+							  VNextStepStartPoing=sensors_get_current_location();
+							 
+							  VVehicleHalted=true;	
+									
+							  VNextPath.pathSteps=0;
+
+
+							</code>
+						};
+
+						message :=CPPathPlannerCtrl(v1)::SConfigOK;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					reply FReplySimError {
+						code {
+							<code>
+							 
+							 
+							 VSimError--;
+
+
+							</code>
+						};
+
+						message :=CPPathPlannerCtrl(v1)::SConfigError;
+
+					};
+
+					/**
+					 * \brief  
+					 */
+
+					send FSendNextPath {
+						code {
+							<code>
+								
+									// Complete Data 
+								
+								*pSTrackPath_Data=VNextPath;
+							 
+								VVehicleHalted=false;	
+							 
+								VNextPath.pathSteps=0;
+							 
+							 	io_ctrl_next_path();
+
+
+							</code>
+						};
+
+						port :=TrackPath;
+
+						message :=CPTrackPath(v1)::STrackPath;
+
+						priority :=3;
+
+					};
+
+
+				};
+
+
+				choice points{
+					choice point Config{
+
+
+						id := 0;
+
+
+						branches{
+
+							branch Config_Error{
+								id := 0;
+								sink := Idle;
+
+
+								handshakes{
+									handshake{
+										invoke := FReplySimError;
+									};
+								};
+
+								guard := ;
+
+							};
+
+
+						};
+
+						default branch Config_OK{
+							id := 1;
+							sink := Idle;
+
+
+							handshakes{
+								handshake{
+									invoke := FReplyConfigOK;
+								};
+							};
+						};
+					};
+					choice point CalStep{
+
+
+						id := 1;
+
+
+						branches{
+
+							branch CalStep_SendMinPath{
+								id := 0;
+								sink := CalculatePath;
+
+
+								actions := FProgNextStep;
+
+								sends := FSendNextPath;
+
+								guard := GSendMinPath;
+
+							};
+
+							branch CalStep_MaxStep{
+								id := 1;
+								sink := CalNextPath;
+
+
+								actions := FMaxSteps;
+
+								guard := GMaxSteps;
+
+							};
+
+
+						};
+
+						default branch CalStep_NextStep{
+							id := 2;
+							sink := CalculatePath;
+
+
+							actions := FProgNextStep;
+						};
+					};
+				};
+
+
+				transitions{
+
+					transition Init{
+						id := 0;
+						source := I;
+						sink := Idle;
+
+
+
+						asynchronous trigger {
+							port := EDROOMsl;
+							message := EDROOMServiceLibrary(v1)::EDROOMStart;
+						};
+					};
+
+					transition Config{
+						id := 1;
+						source := Idle;
+						sink := Config;
+
+
+						actions := FConfigPlanner;
+
+
+						synchronous trigger {
+							port := PathPlannerCtrl;
+							message := CPPathPlannerCtrl(v1)::SConfigPathPlanner;
+						};
+					};
+
+					transition CalStep{
+						id := 2;
+						source := CalculatePath;
+						sink := CalStep;
+
+
+						actions := FCalPathStep;
+
+
+						asynchronous trigger {
+							port := Timer;
+							message := EDROOMTimingSAP(v1)::EDROOMSignalTimeout;
+						};
+					};
+
+					transition Start{
+						id := 3;
+						source := Idle;
+						sink := CalculatePath;
+
+
+						actions := FProgNextStep;
+
+
+						asynchronous trigger {
+							port := PathPlannerCtrl;
+							message := CPPathPlannerCtrl(v1)::SStartPlanning;
+						};
+					};
+
+					transition NewTar{
+						id := 4;
+						source := Top_0;
+						sink := CalculatePath;
+
+
+						msgdatahandler := FNewTarget;
+
+
+						asynchronous trigger {
+							port := PathPlannerCtrl;
+							message := CPPathPlannerCtrl(v1)::SNewTargetLocation;
+						};
+					};
+
+					transition PatRequest{
+						id := 5;
+						source := Top_0;
+						sink := CalculatePath;
+
+
+						sends := FSendNextPath;
+
+
+						asynchronous trigger {
+							port := TrackPath;
+							message := CPTrackPath(v1)::SPathRequest;
+						};
+					};
+
+					transition ObsTDetected{
+						id := 6;
+						source := Top_0;
+						sink := CalculatePath;
+
+
+						msgdatahandler := FMarkObstacle;
+
+						actions := FReplanning;
+
+
+						asynchronous trigger {
+							port := PathPlannerCtrl;
+							message := CPPathPlannerCtrl(v1)::SMarkObstacle;
+						};
+					};
+
+
+				};
+
+
+			};
+
+
+		};
+
+		top context := Top_0;
+
+
+	};
+
+
+};
